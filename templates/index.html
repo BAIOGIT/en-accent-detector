@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Extractor</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        .content {
+            padding: 40px;
+        }
+        
+        .upload-section, .url-section {
+            margin-bottom: 40px;
+            padding: 30px;
+            border: 2px dashed #ddd;
+            border-radius: 10px;
+            transition: all 0.3s ease;
+        }
+        
+        .upload-section:hover, .url-section:hover {
+            border-color: #667eea;
+            background: #f8f9ff;
+        }
+        
+        .section-title {
+            font-size: 1.5em;
+            margin-bottom: 20px;
+            color: #333;
+            text-align: center;
+        }
+        
+        .drop-zone {
+            border: 3px dashed #ccc;
+            border-radius: 10px;
+            padding: 60px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: #fafafa;
+        }
+        
+        .drop-zone:hover, .drop-zone.dragover {
+            border-color: #667eea;
+            background: #f0f4ff;
+        }
+        
+        .drop-zone.dragover {
+            transform: scale(1.02);
+        }
+        
+        .drop-zone-text {
+            font-size: 1.2em;
+            color: #666;
+            margin-bottom: 15px;
+        }
+        
+        .supported-formats {
+            font-size: 0.9em;
+            color: #888;
+            margin-top: 10px;
+        }
+        
+        .file-input {
+            display: none;
+        }
+        
+        .url-input {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 1em;
+            margin-bottom: 20px;
+            transition: border-color 0.3s ease;
+        }
+        
+        .url-input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .btn {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 8px;
+            font-size: 1em;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            width: 100%;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+        }
+        
+        .btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        
+        .progress {
+            display: none;
+            margin: 20px 0;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #f0f0f0;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+        
+        .result {
+            display: none;
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            text-align: center;
+        }
+        
+        .download-btn {
+            background: #28a745;
+            margin-top: 15px;
+        }
+        
+        .download-btn:hover {
+            background: #218838;
+        }
+        
+        .error {
+            color: #dc3545;
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+        
+        .success {
+            color: #155724;
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎵 Audio Extractor</h1>
+            <p>Extract audio from video files or Loom URLs</p>
+        </div>
+        
+        <div class="content">
+            <!-- File Upload Section -->
+            <div class="upload-section">
+                <h2 class="section-title">📁 Upload Video File</h2>
+                <div class="drop-zone" id="dropZone">
+                    <div class="drop-zone-text">
+                        <strong>Drop your video file here</strong><br>
+                        or click to browse
+                    </div>
+                    <div class="supported-formats">
+                        Supported formats: MP4, MOV, AVI, MKV, WebM (max 500MB)
+                    </div>
+                    <input type="file" id="fileInput" class="file-input" accept=".mp4,.mov,.avi,.mkv,.webm">
+                </div>
+                <div class="progress" id="uploadProgress">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="uploadProgressFill"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- URL Section -->
+            <div class="url-section">
+                <h2 class="section-title">🔗 Or Enter Loom Video URL</h2>
+                <input type="url" id="videoUrl" class="url-input" placeholder="Enter Loom video URL (e.g., https://www.loom.com/share/video-id)">
+                <button id="urlBtn" class="btn">Extract Audio from Loom URL</button>
+                <div class="progress" id="urlProgress">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="urlProgressFill"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Result Section -->
+            <div class="result" id="result">
+                <h3>✅ Audio extracted successfully!</h3>
+                <p>Your audio file is ready for download.</p>
+                <button id="downloadBtn" class="btn download-btn">📥 Download Audio (WAV)</button>
+            </div>
+            
+            <!-- Messages -->
+            <div id="messages"></div>
+        </div>
+    </div>
+
+    <script>
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const videoUrl = document.getElementById('videoUrl');
+        const urlBtn = document.getElementById('urlBtn');
+        const result = document.getElementById('result');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const messages = document.getElementById('messages');
+        
+        let currentAudioId = null;
+
+        // Drag and drop functionality
+        dropZone.addEventListener('click', () => fileInput.click());
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('dragover');
+        });
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFileUpload(files[0]);
+            }
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFileUpload(e.target.files[0]);
+            }
+        });
+
+        urlBtn.addEventListener('click', handleUrlSubmit);
+        downloadBtn.addEventListener('click', downloadAudio);
+
+        function handleFileUpload(file) {
+            const allowedTypes = ['video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/x-matroska', 'video/webm'];
+            const allowedExtensions = ['.mp4', '.mov', '.avi', '.mkv', '.webm'];
+            
+            const fileExtension = '.' + file.name.split('.').pop().toLowerCase();
+            
+            if (!allowedTypes.includes(file.type) && !allowedExtensions.includes(fileExtension)) {
+                showMessage('Please select a valid video file (MP4, MOV, AVI, MKV, WebM).', 'error');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            showProgress('uploadProgress');
+            clearMessages();
+
+            fetch('/upload', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                hideProgress('uploadProgress');
+                if (data.success) {
+                    currentAudioId = data.audio_id;
+                    showResult();
+                    showMessage(data.message, 'success');
+                } else {
+                    showMessage(data.error, 'error');
+                }
+            })
+            .catch(error => {
+                hideProgress('uploadProgress');
+                showMessage('Error uploading file: ' + error.message, 'error');
+            });
+        }
+
+        function handleUrlSubmit() {
+            const url = videoUrl.value.trim();
+            if (!url) {
+                showMessage('Please enter a Loom video URL.', 'error');
+                return;
+            }
+
+            if (!url.includes('loom.com')) {
+                showMessage('Please enter a valid Loom video URL.', 'error');
+                return;
+            }
+
+            urlBtn.disabled = true;
+            showProgress('urlProgress');
+            clearMessages();
+
+            fetch('/download_url', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ url: url })
+            })
+            .then(response => response.json())
+            .then(data => {
+                urlBtn.disabled = false;
+                hideProgress('urlProgress');
+                if (data.success) {
+                    currentAudioId = data.audio_id;
+                    showResult();
+                    showMessage(data.message, 'success');
+                } else {
+                    showMessage(data.error, 'error');
+                }
+            })
+            .catch(error => {
+                urlBtn.disabled = false;
+                hideProgress('urlProgress');
+                showMessage('Error processing URL: ' + error.message, 'error');
+            });
+        }
+
+        function downloadAudio() {
+            if (currentAudioId) {
+                window.location.href = `/download/${currentAudioId}`;
+            }
+        }
+
+        function showProgress(elementId) {
+            document.getElementById(elementId).style.display = 'block';
+            const progressFill = document.getElementById(elementId + 'Fill');
+            let width = 0;
+            const interval = setInterval(() => {
+                width += 10;
+                progressFill.style.width = width + '%';
+                if (width >= 90) {
+                    clearInterval(interval);
+                }
+            }, 200);
+        }
+
+        function hideProgress(elementId) {
+            document.getElementById(elementId).style.display = 'none';
+            document.getElementById(elementId + 'Fill').style.width = '0%';
+        }
+
+        function showResult() {
+            result.style.display = 'block';
+        }
+
+        function showMessage(message, type) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = type;
+            messageDiv.textContent = message;
+            messages.appendChild(messageDiv);
+            
+            setTimeout(() => {
+                messageDiv.remove();
+            }, 5000);
+        }
+
+        function clearMessages() {
+            messages.innerHTML = '';
+        }
+    </script>
+</body>
+</html>
