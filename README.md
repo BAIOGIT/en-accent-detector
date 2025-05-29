@@ -101,3 +101,9 @@ This project is open source and available under the [MIT License](LICENSE).
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
+
+
+## Run with Gunicorn
+```
+gunicorn -w 4 -b 127.0.0.1:8000 wsgi:app
+```

@@ -1,36 +1,57 @@
-from flask import Flask, render_template, request, jsonify, send_file
+
 import os
-import ffmpeg
-from werkzeug.utils import secure_filename
 import uuid
-import sys
 import json
+
+from flask import Flask, render_template, request, jsonify, send_file
+from werkzeug.utils import secure_filename
+
+import requests
 import urllib.request
 import urllib.error
-from pathlib import Path
-import requests
-from transformers import pipeline
-import librosa
 from urllib.parse import urlparse
 
+import ffmpeg
+import librosa
+from transformers import pipeline
+
+import torch
+
 app = Flask(__name__)
+
+device = 0 if torch.cuda.is_available() else -1
+
 app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500MB max file size
-app.config['UPLOAD_FOLDER'] = 'static/uploads'
-app.config['OUTPUT_FOLDER'] = 'static/output'
+app.config['UPLOAD_FOLDER'] = 'uploads'
+app.config['OUTPUT_FOLDER'] = 'output'
 
 # Create directories if they don't exist
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 os.makedirs(app.config['OUTPUT_FOLDER'], exist_ok=True)
 os.makedirs('templates', exist_ok=True)
 
-# Initialize the accent classifier pipeline
-print("Loading accent classifier model...")
-try:
-    accent_classifier = pipeline("audio-classification", model="dima806/english_accents_classification")
-    print("Accent classifier loaded successfully!")
-except Exception as e:
-    print(f"Error loading accent classifier: {e}")
-    accent_classifier = None
+# Configuration for model inference
+USE_INFERENCE_API = os.getenv('USE_INFERENCE_API', 'False').lower() == 'true'
+HF_API_TOKEN = os.getenv('HF_API_TOKEN', '')  # Set your Hugging Face token here
+ACCENT_MODEL_REPO = "dima806/english_accents_classification"
+
+# Initialize the accent classifier based on configuration
+accent_classifier = None
+inference_api_url = None
+
+if USE_INFERENCE_API and HF_API_TOKEN:
+    print("Using Hugging Face Inference API...")
+    from huggingface_hub import InferenceClient
+    accent_classifier = InferenceClient(provider='hf-inference', token=HF_API_TOKEN, model=ACCENT_MODEL_REPO)
+    print("Hugging Face Inference API initialized successfully!")
+else:
+    print("Loading local accent classifier model...")
+    try:
+        accent_classifier = pipeline("audio-classification", model=ACCENT_MODEL_REPO, device=device)
+        print("Local accent classifier loaded successfully!")
+    except Exception as e:
+        print(f"Error loading local accent classifier: {e}")
+        accent_classifier = None
 
 def is_loom_video_url(url):
     """Check if URL is a Loom video URL"""
@@ -161,10 +182,45 @@ def extract_audio(video_path, unique_id):
     
     return output_path
 
-def detect_accent(audio_path):
-    """Detect English accent from audio file"""
+def detect_accent_with_api(audio_path):
+    """Detect accent using Hugging Face Inference API (huggingface_hub.InferenceClient)"""
+    try:
+        # Use the InferenceClient object already initialized as accent_classifier
+        if accent_classifier is None:
+            return {'error': 'Inference API is not initialized'}
+
+        print("Sending request to Inference API using huggingface_hub.InferenceClient...")
+        results = accent_classifier.audio_classification(audio_path)
+        print(f"API response: {results}")
+
+        # Handle the response format from InferenceClient
+        if isinstance(results, list) and len(results) > 0:
+            # Format results for consistent output
+            formatted_results = []
+            for result in results:
+                accent = result.label
+                confidence = result.score
+                formatted_results.append({
+                    'accent': accent,
+                    'confidence': round(confidence * 100, 2)
+                })
+
+            return {
+                'success': True,
+                'results': formatted_results,
+                'top_accent': formatted_results[0]['accent'],
+                'top_confidence': formatted_results[0]['confidence']
+            }
+        else:
+            return {'error': 'Invalid response format from API'}
+
+    except Exception as e:
+        return {'error': f'Error calling Inference API: {str(e)}'}
+
+def detect_accent_locally(audio_path):
+    """Detect accent using local model"""
     if not accent_classifier:
-        return {'error': 'Accent classifier not available'}
+        return {'error': 'Local accent classifier not available'}
     
     try:
         # Load audio file with librosa (the model expects 16kHz mono)
@@ -172,8 +228,7 @@ def detect_accent(audio_path):
         
         # Run inference
         results = accent_classifier(audio)
-
-        print(f"Accent detection results: {results}")
+        print(f"Local model results: {results}")
         
         # Format results for better display
         formatted_results = []
@@ -193,11 +248,36 @@ def detect_accent(audio_path):
         }
         
     except Exception as e:
-        return {'error': f'Error detecting accent: {str(e)}'}
+        return {'error': f'Error detecting accent locally: {str(e)}'}
+
+def detect_accent(audio_path):
+    """Detect English accent from audio file using either API or local model"""
+    inference_method = "Inference API" if USE_INFERENCE_API else "Local Model"
+    print(f"Using {inference_method} for accent detection...")
+    
+    if USE_INFERENCE_API and HF_API_TOKEN:
+        return detect_accent_with_api(audio_path)
+    else:
+        return detect_accent_locally(audio_path)
+
+@app.before_request
+def skip_ngrok_warning():
+    if request.headers.get("ngrok-skip-browser-warning"):
+        pass  # Let the request through
 
 @app.route('/')
 def home():
     return render_template('index.html')
+
+@app.route('/config')
+def get_config():
+    """Return current configuration"""
+    return jsonify({
+        'use_inference_api': USE_INFERENCE_API,
+        'has_api_token': bool(HF_API_TOKEN),
+        'model_repo': ACCENT_MODEL_REPO,
+        'local_model_available': accent_classifier is not None
+    })
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
@@ -231,7 +311,8 @@ def upload_file():
         response_data = {
             'success': True,
             'audio_id': unique_id,
-            'message': 'Audio extracted successfully from uploaded file'
+            'message': 'Audio extracted successfully from uploaded file',
+            'inference_method': 'Inference API' if USE_INFERENCE_API else 'Local Model'
         }
         
         # Add accent detection results
@@ -295,7 +376,8 @@ def download_from_url():
         response_data = {
             'success': True,
             'audio_id': unique_id,
-            'message': 'Audio extracted successfully from video URL'
+            'message': 'Audio extracted successfully from video URL',
+            'inference_method': 'Inference API' if USE_INFERENCE_API else 'Local Model'
         }
         
         # Add accent detection results
@@ -324,5 +406,16 @@ def download_audio(audio_id):
 def about():
     return 'Audio Extractor with English Accent Detection - Extract audio from video files, Loom URLs, or direct video URLs and detect English accents'
 
+@app.route('/health')
+def health_check():
+    """Health check endpoint for container monitoring"""
+    return jsonify({
+        'status': 'healthy',
+        'inference_api': USE_INFERENCE_API,
+        'model_available': accent_classifier is not None
+    })
+
 if __name__ == '__main__':
-    app.run(debug=True)
+    # For development only
+    port = int(os.environ.get('PORT', 8080))
+    app.run(host='0.0.0.0', port=port, debug=False)
