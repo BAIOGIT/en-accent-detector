@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Audio Extractor</title>
+    <title>Audio Extractor with Accent Detection</title>
     <style>
         * {
             margin: 0;
@@ -166,6 +166,64 @@
             text-align: center;
         }
         
+        .accent-results {
+            margin: 20px 0;
+            padding: 20px;
+            background: #e8f4fd;
+            border-radius: 8px;
+            border-left: 4px solid #007bff;
+        }
+        
+        .accent-title {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #0056b3;
+            margin-bottom: 15px;
+        }
+        
+        .primary-accent {
+            font-size: 1.4em;
+            font-weight: bold;
+            color: #0056b3;
+            margin-bottom: 10px;
+        }
+        
+        .confidence-bar {
+            width: 100%;
+            height: 10px;
+            background: #e0e0e0;
+            border-radius: 5px;
+            overflow: hidden;
+            margin: 5px 0;
+        }
+        
+        .confidence-fill {
+            height: 100%;
+            background: linear-gradient(45deg, #28a745, #20c997);
+            border-radius: 5px;
+            transition: width 0.3s ease;
+        }
+        
+        .accent-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 10px 0;
+            padding: 8px;
+            background: white;
+            border-radius: 5px;
+        }
+        
+        .accent-name {
+            font-weight: 500;
+            color: #333;
+        }
+        
+        .accent-confidence {
+            font-weight: bold;
+            color: #0056b3;
+        }
+        
         .download-btn {
             background: #28a745;
             margin-top: 15px;
@@ -192,13 +250,22 @@
             border-radius: 8px;
             margin-top: 20px;
         }
+        
+        .warning {
+            color: #856404;
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>🎵 Audio Extractor</h1>
-            <p>Extract audio from video files or Loom URLs</p>
+            <h1>🎵🔍 Audio Extractor & Accent Detector</h1>
+            <p>Extract audio from videos and detect English accents using AI</p>
         </div>
         
         <div class="content">
@@ -226,7 +293,7 @@
             <div class="url-section">
                 <h2 class="section-title">🔗 Or Enter Loom Video URL</h2>
                 <input type="url" id="videoUrl" class="url-input" placeholder="Enter Loom video URL (e.g., https://www.loom.com/share/video-id)">
-                <button id="urlBtn" class="btn">Extract Audio from Loom URL</button>
+                <button id="urlBtn" class="btn">Extract Audio & Detect Accent</button>
                 <div class="progress" id="urlProgress">
                     <div class="progress-bar">
                         <div class="progress-fill" id="urlProgressFill"></div>
@@ -236,7 +303,15 @@
             
             <!-- Result Section -->
             <div class="result" id="result">
-                <h3>✅ Audio extracted successfully!</h3>
+                <h3>✅ Processing completed successfully!</h3>
+                
+                <!-- Accent Detection Results -->
+                <div class="accent-results" id="accentResults" style="display: none;">
+                    <div class="accent-title">🗣️ English Accent Detection Results</div>
+                    <div class="primary-accent" id="primaryAccent"></div>
+                    <div id="allAccents"></div>
+                </div>
+                
                 <p>Your audio file is ready for download.</p>
                 <button id="downloadBtn" class="btn download-btn">📥 Download Audio (WAV)</button>
             </div>
@@ -254,6 +329,9 @@
         const result = document.getElementById('result');
         const downloadBtn = document.getElementById('downloadBtn');
         const messages = document.getElementById('messages');
+        const accentResults = document.getElementById('accentResults');
+        const primaryAccent = document.getElementById('primaryAccent');
+        const allAccents = document.getElementById('allAccents');
         
         let currentAudioId = null;
 
@@ -312,6 +390,13 @@
                     currentAudioId = data.audio_id;
                     showResult();
                     showMessage(data.message, 'success');
+                    
+                    // Display accent detection results
+                    if (data.accent_detection) {
+                        displayAccentResults(data.accent_detection);
+                    } else if (data.accent_error) {
+                        showMessage('Accent detection failed: ' + data.accent_error, 'warning');
+                    }
                 } else {
                     showMessage(data.error, 'error');
                 }
@@ -353,6 +438,13 @@
                     currentAudioId = data.audio_id;
                     showResult();
                     showMessage(data.message, 'success');
+                    
+                    // Display accent detection results
+                    if (data.accent_detection) {
+                        displayAccentResults(data.accent_detection);
+                    } else if (data.accent_error) {
+                        showMessage('Accent detection failed: ' + data.accent_error, 'warning');
+                    }
                 } else {
                     showMessage(data.error, 'error');
                 }
@@ -362,6 +454,38 @@
                 hideProgress('urlProgress');
                 showMessage('Error processing URL: ' + error.message, 'error');
             });
+        }
+
+        function displayAccentResults(accentData) {
+            if (!accentData.success) {
+                showMessage('Error in accent detection: ' + accentData.error, 'warning');
+                return;
+            }
+
+            // Show the accent results section
+            accentResults.style.display = 'block';
+            
+            // Display primary accent
+            primaryAccent.innerHTML = `
+                <div>Detected Accent: <strong>${accentData.top_accent}</strong></div>
+                <div style="font-size: 0.9em; color: #666;">Confidence: ${accentData.top_confidence}%</div>
+                <div class="confidence-bar">
+                    <div class="confidence-fill" style="width: ${accentData.top_confidence}%"></div>
+                </div>
+            `;
+            
+            // Display all results
+            let allAccentsHtml = '<div style="margin-top: 15px; font-size: 0.9em; color: #666;">All Results:</div>';
+            accentData.results.forEach(result => {
+                allAccentsHtml += `
+                    <div class="accent-item">
+                        <span class="accent-name">${result.accent}</span>
+                        <span class="accent-confidence">${result.confidence}%</span>
+                    </div>
+                `;
+            });
+            
+            allAccents.innerHTML = allAccentsHtml;
         }
 
         function downloadAudio() {
@@ -400,11 +524,12 @@
             
             setTimeout(() => {
                 messageDiv.remove();
-            }, 5000);
+            }, 7000);
         }
 
         function clearMessages() {
             messages.innerHTML = '';
+            accentResults.style.display = 'none';
         }
     </script>
 </body>

@@ -9,6 +9,8 @@ import urllib.request
 import urllib.error
 from pathlib import Path
 import requests
+from transformers import pipeline
+import librosa
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500MB max file size
@@ -19,6 +21,15 @@ app.config['OUTPUT_FOLDER'] = 'output'
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 os.makedirs(app.config['OUTPUT_FOLDER'], exist_ok=True)
 os.makedirs('templates', exist_ok=True)
+
+# Initialize the accent classifier pipeline
+print("Loading accent classifier model...")
+try:
+    accent_classifier = pipeline("audio-classification", model="dima806/english_accents_classification")
+    print("Accent classifier loaded successfully!")
+except Exception as e:
+    print(f"Error loading accent classifier: {e}")
+    accent_classifier = None
 
 def is_loom_video_url(url):
     """Check if URL is a Loom video URL"""
@@ -111,15 +122,15 @@ def extract_audio(video_path, unique_id):
         if not audio_streams:
             raise Exception("Video file contains no audio streams")
         
-        # Extract audio
+        # Extract audio with proper sampling rate for the model (16kHz)
         (
             ffmpeg
             .input(video_path)
             .output(output_path, 
                    vn=None,  # no video
                    acodec='pcm_s16le',
-                   ar=44100,
-                   ac=2)
+                   ar=16000,  # 16kHz sampling rate for the model
+                   ac=1)      # mono audio
             .overwrite_output()
             .run(capture_stdout=True, capture_stderr=True)
         )
@@ -127,6 +138,40 @@ def extract_audio(video_path, unique_id):
         raise Exception(f"FFmpeg error: {e.stderr.decode()}")
     
     return output_path
+
+def detect_accent(audio_path):
+    """Detect English accent from audio file"""
+    if not accent_classifier:
+        return {'error': 'Accent classifier not available'}
+    
+    try:
+        # Load audio file with librosa (the model expects 16kHz mono)
+        audio, sample_rate = librosa.load(audio_path, sr=16000, mono=True)
+        
+        # Run inference
+        results = accent_classifier(audio)
+
+        print(f"Accent detection results: {results}")
+        
+        # Format results for better display
+        formatted_results = []
+        for result in results:
+            accent = result['label']
+            confidence = result['score']
+            formatted_results.append({
+                'accent': accent,
+                'confidence': round(confidence * 100, 2)
+            })
+        
+        return {
+            'success': True,
+            'results': formatted_results,
+            'top_accent': formatted_results[0]['accent'],
+            'top_confidence': formatted_results[0]['confidence']
+        }
+        
+    except Exception as e:
+        return {'error': f'Error detecting accent: {str(e)}'}
 
 @app.route('/')
 def home():
@@ -155,14 +200,25 @@ def upload_file():
         # Extract audio
         audio_path = extract_audio(file_path, unique_id)
         
+        # Detect accent
+        accent_result = detect_accent(audio_path)
+        
         # Clean up video file
         os.remove(file_path)
         
-        return jsonify({
+        response_data = {
             'success': True,
             'audio_id': unique_id,
             'message': 'Audio extracted successfully from uploaded file'
-        })
+        }
+        
+        # Add accent detection results
+        if 'error' in accent_result:
+            response_data['accent_error'] = accent_result['error']
+        else:
+            response_data['accent_detection'] = accent_result
+        
+        return jsonify(response_data)
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -198,14 +254,25 @@ def download_from_url():
             # Extract audio
             audio_path = extract_audio(video_path, unique_id)
             
+            # Detect accent
+            accent_result = detect_accent(audio_path)
+            
             # Clean up video file
             os.remove(video_path)
             
-            return jsonify({
+            response_data = {
                 'success': True,
                 'audio_id': unique_id,
                 'message': 'Audio extracted successfully from Loom video'
-            })
+            }
+            
+            # Add accent detection results
+            if 'error' in accent_result:
+                response_data['accent_error'] = accent_result['error']
+            else:
+                response_data['accent_detection'] = accent_result
+            
+            return jsonify(response_data)
         else:
             return jsonify({'error': 'Currently only Loom URLs are supported. Please upload a file instead.'}), 400
         
@@ -225,7 +292,7 @@ def download_audio(audio_id):
 
 @app.route('/about')
 def about():
-    return 'Audio Extractor - Extract audio from video files or Loom URLs'
+    return 'Audio Extractor with English Accent Detection - Extract audio from video files or Loom URLs and detect English accents'
 
 if __name__ == '__main__':
     app.run(debug=True)
