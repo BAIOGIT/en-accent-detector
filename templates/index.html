@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Audio Extractor with Accent Detection</title>
+    <title>English Accent Evaluation Tool</title>
     <style>
         * {
             margin: 0;
@@ -13,7 +13,7 @@
         
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg,rgb(42, 52, 99) 0%,rgb(43, 27, 59) 100%);
             min-height: 100vh;
             padding: 20px;
         }
@@ -43,8 +43,46 @@
             padding: 40px;
         }
         
+        /* Tab Navigation */
+        .tab-nav {
+            display: flex;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+        
+        .tab-btn {
+            flex: 1;
+            padding: 15px 20px;
+            background: none;
+            border: none;
+            font-size: 1.1em;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            color: #666;
+            border-bottom: 3px solid transparent;
+        }
+        
+        .tab-btn.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+            background: #f8f9ff;
+        }
+        
+        .tab-btn:hover {
+            background: #f0f4ff;
+            color: #667eea;
+        }
+        
+        /* Tab Content */
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
         .upload-section, .url-section {
-            margin-bottom: 40px;
             padding: 30px;
             border: 2px dashed #ddd;
             border-radius: 10px;
@@ -61,6 +99,29 @@
             margin-bottom: 20px;
             color: #333;
             text-align: center;
+        }
+        
+        .url-examples {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 0.9em;
+            color: #666;
+        }
+        
+        .url-examples h4 {
+            color: #333;
+            margin-bottom: 8px;
+        }
+        
+        .url-examples code {
+            background: #e9ecef;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: monospace;
+            display: block;
+            margin: 4px 0;
         }
         
         .drop-zone {
@@ -157,20 +218,86 @@
             transition: width 0.3s ease;
         }
         
-        .result {
+        /* Modal Styles */
+        .modal {
             display: none;
-            margin-top: 30px;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            backdrop-filter: blur(5px);
+        }
+        
+        .modal-content {
+            background-color: white;
+            margin: 5% auto;
+            padding: 0;
+            border-radius: 15px;
+            width: 90%;
+            max-width: 600px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+            animation: modalSlideIn 0.3s ease;
+        }
+        
+        @keyframes modalSlideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-50px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .modal-header {
+            background: linear-gradient(45deg, #28a745, #20c997);
+            color: white;
             padding: 20px;
-            background: #f8f9fa;
-            border-radius: 8px;
-            text-align: center;
+            border-radius: 15px 15px 0 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .modal-title {
+            font-size: 1.5em;
+            font-weight: bold;
+        }
+        
+        .close {
+            color: white;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            border: none;
+            background: none;
+            padding: 0;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            transition: background-color 0.3s ease;
+        }
+        
+        .close:hover {
+            background-color: rgba(255,255,255,0.2);
+        }
+        
+        .modal-body {
+            padding: 30px;
         }
         
         .accent-results {
-            margin: 20px 0;
+            margin-bottom: 30px;
             padding: 20px;
             background: #e8f4fd;
-            border-radius: 8px;
+            border-radius: 10px;
             border-left: 4px solid #007bff;
         }
         
@@ -185,22 +312,22 @@
             font-size: 1.4em;
             font-weight: bold;
             color: #0056b3;
-            margin-bottom: 10px;
+            margin-bottom: 15px;
         }
         
         .confidence-bar {
             width: 100%;
-            height: 10px;
+            height: 12px;
             background: #e0e0e0;
-            border-radius: 5px;
+            border-radius: 6px;
             overflow: hidden;
-            margin: 5px 0;
+            margin: 10px 0;
         }
         
         .confidence-fill {
             height: 100%;
             background: linear-gradient(45deg, #28a745, #20c997);
-            border-radius: 5px;
+            border-radius: 6px;
             transition: width 0.3s ease;
         }
         
@@ -209,9 +336,10 @@
             justify-content: space-between;
             align-items: center;
             margin: 10px 0;
-            padding: 8px;
+            padding: 12px;
             background: white;
-            border-radius: 5px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
         }
         
         .accent-name {
@@ -224,13 +352,30 @@
             color: #0056b3;
         }
         
+        .download-section {
+            text-align: center;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+        
         .download-btn {
-            background: #28a745;
-            margin-top: 15px;
+            background: linear-gradient(45deg, #28a745, #20c997);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 8px;
+            font-size: 1.1em;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
         }
         
         .download-btn:hover {
-            background: #218838;
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(40,167,69,0.3);
         }
         
         .error {
@@ -259,65 +404,104 @@
             border-radius: 8px;
             margin-top: 20px;
         }
+        
+        .icon {
+            margin-right: 8px;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>🎵🔍 Audio Extractor & Accent Detector</h1>
-            <p>Extract audio from videos and detect English accents using AI</p>
+            <h1>English Accent Evaluation Tool</h1>
+            <p>Analyze audio from video files to identify English accents with confidence scores. Built for internal hiring assessments.</p>
         </div>
         
         <div class="content">
-            <!-- File Upload Section -->
-            <div class="upload-section">
-                <h2 class="section-title">📁 Upload Video File</h2>
-                <div class="drop-zone" id="dropZone">
-                    <div class="drop-zone-text">
-                        <strong>Drop your video file here</strong><br>
-                        or click to browse
+            <!-- Tab Navigation -->
+            <div class="tab-nav">
+                <button class="tab-btn active" onclick="switchTab('url')">
+                    <span class="icon">🔗</span>Download Video from URL
+                </button>
+                <button class="tab-btn" onclick="switchTab('upload')">
+                    <span class="icon">📁</span>Upload Video File
+                </button>
+            </div>
+            
+            <!-- URL Tab -->
+            <div id="urlTab" class="tab-content active">
+                <div class="url-section">
+                    <h2 class="section-title">Download Video from URL</h2>
+                    
+                    <div class="url-examples">
+                        <h4>Supported URL Types:</h4>
+                        <strong>Loom Videos:</strong>
+                        <code>https://www.loom.com/share/video-id</code>
+                        <strong>Direct Video URLs:</strong>
+                        <code>https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/WeAreGoingOnBullrun.mp4</code>
+                        <code>https://example.com/video.mp4</code>
                     </div>
-                    <div class="supported-formats">
-                        Supported formats: MP4, MOV, AVI, MKV, WebM (max 500MB)
-                    </div>
-                    <input type="file" id="fileInput" class="file-input" accept=".mp4,.mov,.avi,.mkv,.webm">
-                </div>
-                <div class="progress" id="uploadProgress">
-                    <div class="progress-bar">
-                        <div class="progress-fill" id="uploadProgressFill"></div>
+                    
+                    <input type="url" id="videoUrl" class="url-input" placeholder="Enter Loom URL or direct video URL (MP4, MOV, AVI, MKV, WebM)">
+                    <button id="urlBtn" class="btn">Extract Audio & Detect Accent</button>
+                    <div class="progress" id="urlProgress">
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="urlProgressFill"></div>
+                        </div>
                     </div>
                 </div>
             </div>
             
-            <!-- URL Section -->
-            <div class="url-section">
-                <h2 class="section-title">🔗 Or Enter Loom Video URL</h2>
-                <input type="url" id="videoUrl" class="url-input" placeholder="Enter Loom video URL (e.g., https://www.loom.com/share/video-id)">
-                <button id="urlBtn" class="btn">Extract Audio & Detect Accent</button>
-                <div class="progress" id="urlProgress">
-                    <div class="progress-bar">
-                        <div class="progress-fill" id="urlProgressFill"></div>
+            <!-- Upload Tab -->
+            <div id="uploadTab" class="tab-content">
+                <div class="upload-section">
+                    <h2 class="section-title">Upload Video File</h2>
+                    <div class="drop-zone" id="dropZone">
+                        <div class="drop-zone-text">
+                            <strong>Drop your video file here</strong><br>
+                            or click to browse
+                        </div>
+                        <div class="supported-formats">
+                            Supported formats: MP4, MOV, AVI, MKV, WebM (max 500MB)
+                        </div>
+                        <input type="file" id="fileInput" class="file-input" accept=".mp4,.mov,.avi,.mkv,.webm">
+                    </div>
+                    <div class="progress" id="uploadProgress">
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="uploadProgressFill"></div>
+                        </div>
                     </div>
                 </div>
             </div>
             
-            <!-- Result Section -->
-            <div class="result" id="result">
-                <h3>✅ Processing completed successfully!</h3>
-                
+            <!-- Messages -->
+            <div id="messages"></div>
+        </div>
+    </div>
+    
+    <!-- Results Modal -->
+    <div id="resultsModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">Analysis Complete</div>
+                <button class="close" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body">
                 <!-- Accent Detection Results -->
-                <div class="accent-results" id="accentResults" style="display: none;">
+                <div class="accent-results" id="accentResults">
                     <div class="accent-title">🗣️ English Accent Detection Results</div>
                     <div class="primary-accent" id="primaryAccent"></div>
                     <div id="allAccents"></div>
                 </div>
                 
-                <p>Your audio file is ready for download.</p>
-                <button id="downloadBtn" class="btn download-btn">📥 Download Audio (WAV)</button>
+                <!-- Download Section -->
+                <div class="download-section">
+                    <p style="margin: 10px 0; color: #666;">The audio has been successfully extracted and analyzed.</p>
+                    <a id="downloadBtn" class="download-btn" href="#" download>
+                        📥 Download WAV Audio
+                    </a>
+                </div>
             </div>
-            
-            <!-- Messages -->
-            <div id="messages"></div>
         </div>
     </div>
 
@@ -326,14 +510,51 @@
         const fileInput = document.getElementById('fileInput');
         const videoUrl = document.getElementById('videoUrl');
         const urlBtn = document.getElementById('urlBtn');
-        const result = document.getElementById('result');
         const downloadBtn = document.getElementById('downloadBtn');
         const messages = document.getElementById('messages');
         const accentResults = document.getElementById('accentResults');
         const primaryAccent = document.getElementById('primaryAccent');
         const allAccents = document.getElementById('allAccents');
+        const resultsModal = document.getElementById('resultsModal');
         
         let currentAudioId = null;
+
+        // Tab switching functionality
+        function switchTab(tab) {
+            // Update tab buttons
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.closest('.tab-btn').classList.add('active');
+            
+            // Update tab content
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            document.getElementById(tab + 'Tab').classList.add('active');
+            
+            // Clear messages and reset forms
+            clearMessages();
+            if (tab === 'url') {
+                videoUrl.value = '';
+            } else {
+                fileInput.value = '';
+            }
+        }
+
+        // Modal functionality
+        function showModal() {
+            resultsModal.style.display = 'block';
+            document.body.style.overflow = 'hidden';
+        }
+        
+        function closeModal() {
+            resultsModal.style.display = 'none';
+            document.body.style.overflow = 'auto';
+        }
+        
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            if (event.target == resultsModal) {
+                closeModal();
+            }
+        }
 
         // Drag and drop functionality
         dropZone.addEventListener('click', () => fileInput.click());
@@ -360,7 +581,6 @@
         });
 
         urlBtn.addEventListener('click', handleUrlSubmit);
-        downloadBtn.addEventListener('click', downloadAudio);
 
         function handleFileUpload(file) {
             const allowedTypes = ['video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/x-matroska', 'video/webm'];
@@ -388,12 +608,12 @@
                 hideProgress('uploadProgress');
                 if (data.success) {
                     currentAudioId = data.audio_id;
-                    showResult();
                     showMessage(data.message, 'success');
                     
-                    // Display accent detection results
+                    // Display results in modal
                     if (data.accent_detection) {
                         displayAccentResults(data.accent_detection);
+                        showModal();
                     } else if (data.accent_error) {
                         showMessage('Accent detection failed: ' + data.accent_error, 'warning');
                     }
@@ -410,12 +630,12 @@
         function handleUrlSubmit() {
             const url = videoUrl.value.trim();
             if (!url) {
-                showMessage('Please enter a Loom video URL.', 'error');
+                showMessage('Please enter a video URL.', 'error');
                 return;
             }
 
-            if (!url.includes('loom.com')) {
-                showMessage('Please enter a valid Loom video URL.', 'error');
+            if (!url.startsWith('http')) {
+                showMessage('Please enter a valid URL starting with http:// or https://', 'error');
                 return;
             }
 
@@ -436,12 +656,12 @@
                 hideProgress('urlProgress');
                 if (data.success) {
                     currentAudioId = data.audio_id;
-                    showResult();
                     showMessage(data.message, 'success');
                     
-                    // Display accent detection results
+                    // Display results in modal
                     if (data.accent_detection) {
                         displayAccentResults(data.accent_detection);
+                        showModal();
                     } else if (data.accent_error) {
                         showMessage('Accent detection failed: ' + data.accent_error, 'warning');
                     }
@@ -462,20 +682,17 @@
                 return;
             }
 
-            // Show the accent results section
-            accentResults.style.display = 'block';
-            
             // Display primary accent
             primaryAccent.innerHTML = `
                 <div>Detected Accent: <strong>${accentData.top_accent}</strong></div>
-                <div style="font-size: 0.9em; color: #666;">Confidence: ${accentData.top_confidence}%</div>
+                <div style="font-size: 0.9em; color: #666; margin: 8px 0;">Confidence: ${accentData.top_confidence}%</div>
                 <div class="confidence-bar">
                     <div class="confidence-fill" style="width: ${accentData.top_confidence}%"></div>
                 </div>
             `;
             
             // Display all results
-            let allAccentsHtml = '<div style="margin-top: 15px; font-size: 0.9em; color: #666;">All Results:</div>';
+            let allAccentsHtml = '<div style="margin-top: 15px; font-size: 0.9em; color: #666; margin-bottom: 10px;">All Detection Results:</div>';
             accentData.results.forEach(result => {
                 allAccentsHtml += `
                     <div class="accent-item">
@@ -486,12 +703,9 @@
             });
             
             allAccents.innerHTML = allAccentsHtml;
-        }
-
-        function downloadAudio() {
-            if (currentAudioId) {
-                window.location.href = `/download/${currentAudioId}`;
-            }
+            
+            // Set download link
+            downloadBtn.href = `/download/${currentAudioId}`;
         }
 
         function showProgress(elementId) {
@@ -512,10 +726,6 @@
             document.getElementById(elementId + 'Fill').style.width = '0%';
         }
 
-        function showResult() {
-            result.style.display = 'block';
-        }
-
         function showMessage(message, type) {
             const messageDiv = document.createElement('div');
             messageDiv.className = type;
@@ -529,7 +739,6 @@
 
         function clearMessages() {
             messages.innerHTML = '';
-            accentResults.style.display = 'none';
         }
     </script>
 </body>

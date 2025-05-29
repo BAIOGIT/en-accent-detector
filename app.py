@@ -11,11 +11,12 @@ from pathlib import Path
 import requests
 from transformers import pipeline
 import librosa
+from urllib.parse import urlparse
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500MB max file size
-app.config['UPLOAD_FOLDER'] = 'uploads'
-app.config['OUTPUT_FOLDER'] = 'output'
+app.config['UPLOAD_FOLDER'] = 'static/uploads'
+app.config['OUTPUT_FOLDER'] = 'static/output'
 
 # Create directories if they don't exist
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
@@ -36,6 +37,13 @@ def is_loom_video_url(url):
     loom_domain = 'www.loom.com'
     trimmed_url = url.strip()
     return trimmed_url.startswith('https://') and loom_domain in trimmed_url
+
+def is_direct_video_url(url):
+    """Check if URL is a direct video file URL"""
+    video_extensions = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.m4v', '.3gp']
+    parsed_url = urlparse(url.lower())
+    path = parsed_url.path
+    return any(path.endswith(ext) for ext in video_extensions)
 
 def get_loom_video_id(video_url):
     """Extract video ID from Loom URL"""
@@ -87,28 +95,42 @@ def fetch_loom_download_url(video_id):
     except Exception as e:
         return {'success': False, 'message': str(e)}
 
-def download_loom_video(video_url, unique_id):
-    """Download Loom video to local file"""
+def download_video_from_url(video_url, unique_id):
+    """Download video from direct URL"""
     try:
-        filename = f"{unique_id}.mp4"
+        # Get file extension from URL
+        parsed_url = urlparse(video_url)
+        path = parsed_url.path
+        extension = '.mp4'  # default
+        if '.' in path:
+            extension = '.' + path.split('.')[-1].lower()
+        
+        filename = f"{unique_id}{extension}"
         file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         
         headers = {
             'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
             'Accept': '*/*',
             'Accept-Language': 'en-US,en;q=0.9',
-            'Referer': 'https://www.loom.com/',
         }
 
-        with requests.get(video_url, stream=True, headers=headers) as r:
+        print(f"Downloading video from: {video_url}")
+        with requests.get(video_url, stream=True, headers=headers, timeout=30) as r:
             r.raise_for_status()
+            
+            # Check if the content is actually a video
+            content_type = r.headers.get('content-type', '').lower()
+            if not (content_type.startswith('video/') or content_type.startswith('application/octet-stream')):
+                raise Exception(f"URL does not point to a video file. Content-Type: {content_type}")
+            
             with open(file_path, 'wb') as f:
                 for chunk in r.iter_content(chunk_size=8192):
                     f.write(chunk)
         
+        print(f"Video downloaded successfully to: {file_path}")
         return file_path
     except Exception as e:
-        raise Exception(f'Error downloading Loom video: {str(e)}')
+        raise Exception(f'Error downloading video: {str(e)}')
 
 def extract_audio(video_path, unique_id):
     """Extract audio from video file using ffmpeg-python"""
@@ -240,6 +262,7 @@ def download_from_url():
         
         # Check if it's a Loom URL
         if is_loom_video_url(url):
+            print("Processing Loom URL...")
             # Handle Loom video
             video_id = get_loom_video_id(url)
             
@@ -249,32 +272,39 @@ def download_from_url():
                 return jsonify({'error': f"Failed to get Loom video URL: {url_response['message']}"}), 400
             
             # Download the video
-            video_path = download_loom_video(url_response['data'], unique_id)
+            video_path = download_video_from_url(url_response['data'], unique_id)
             
-            # Extract audio
-            audio_path = extract_audio(video_path, unique_id)
+        # Check if it's a direct video URL
+        elif is_direct_video_url(url):
+            print("Processing direct video URL...")
+            # Download directly
+            video_path = download_video_from_url(url, unique_id)
             
-            # Detect accent
-            accent_result = detect_accent(audio_path)
-            
-            # Clean up video file
-            os.remove(video_path)
-            
-            response_data = {
-                'success': True,
-                'audio_id': unique_id,
-                'message': 'Audio extracted successfully from Loom video'
-            }
-            
-            # Add accent detection results
-            if 'error' in accent_result:
-                response_data['accent_error'] = accent_result['error']
-            else:
-                response_data['accent_detection'] = accent_result
-            
-            return jsonify(response_data)
         else:
-            return jsonify({'error': 'Currently only Loom URLs are supported. Please upload a file instead.'}), 400
+            return jsonify({'error': 'Please provide a valid Loom URL or direct video file URL (MP4, MOV, AVI, MKV, WebM)'}), 400
+        
+        # Extract audio
+        audio_path = extract_audio(video_path, unique_id)
+        
+        # Detect accent
+        accent_result = detect_accent(audio_path)
+        
+        # Clean up video file
+        os.remove(video_path)
+        
+        response_data = {
+            'success': True,
+            'audio_id': unique_id,
+            'message': 'Audio extracted successfully from video URL'
+        }
+        
+        # Add accent detection results
+        if 'error' in accent_result:
+            response_data['accent_error'] = accent_result['error']
+        else:
+            response_data['accent_detection'] = accent_result
+        
+        return jsonify(response_data)
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -292,7 +322,7 @@ def download_audio(audio_id):
 
 @app.route('/about')
 def about():
-    return 'Audio Extractor with English Accent Detection - Extract audio from video files or Loom URLs and detect English accents'
+    return 'Audio Extractor with English Accent Detection - Extract audio from video files, Loom URLs, or direct video URLs and detect English accents'
 
 if __name__ == '__main__':
     app.run(debug=True)

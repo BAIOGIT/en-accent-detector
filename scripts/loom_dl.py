@@ -39,7 +39,7 @@ def fetch_loom_download_url(video_id):
 
 def download_loom_video(url, filename):
     try:
-        dir_path = Path('downloaded-videos')
+        dir_path = Path('downloads')
         dir_path.mkdir(parents=True, exist_ok=True)
         file_path = dir_path / filename
 

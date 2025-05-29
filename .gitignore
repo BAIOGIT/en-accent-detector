@@ -12,6 +12,6 @@ ENV/
 env.bak/ 
 venv.bak/ 
 
-downloaded-videos/
-output/
+downloads/
 static/uploads/
+static/output/
