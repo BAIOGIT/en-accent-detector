@@ -6,7 +6,7 @@ A Flask web application that extracts audio from videos and detects English acce
 ![Flask](https://img.shields.io/badge/flask-v2.3+-green.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 
-## Live Demo
+## Live Demo (discontinued)
 https://oem2wrwze7490w-8080.proxy.runpod.net/
 
 ## ✨ Features
